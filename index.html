@@ -41,13 +41,118 @@
   <script type="module" src="js/app.js"></script>
 
   <!-- Register Service Worker -->
-  <script>
+  <script type="module">
+    import { exportToJSON } from './js/utils/export.js';
+
+    let refreshing = false;
+
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js')
-          .then(reg => console.log('SW registered:', reg.scope))
+          .then(reg => {
+            console.log('SW registered:', reg.scope);
+
+            // 当已经有等待中的 SW 时（比如上次后台更新下载完由于用户没刷新而滞留）
+            if (reg.waiting) {
+              showUpdateDialog(reg.waiting);
+            }
+
+            // 监听新的 SW 安装过程
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              newWorker.addEventListener('statechange', () => {
+                // 如果已经有受控页面，且新的 SW 状态变成 installed（等待激活），则弹出提醒
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  showUpdateDialog(newWorker);
+                }
+              });
+            });
+          })
           .catch(err => console.warn('SW registration failed:', err));
+
+        // 监听到有新的 SW 被激活（接管页面控制权）时执行刷新
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
       });
+    }
+
+    function showUpdateDialog(worker) {
+      if (document.getElementById('update-dialog')) return;
+
+      const el = document.createElement('div');
+      el.id = 'update-dialog';
+      el.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #fff;
+        padding: 16px 20px;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        width: 90%;
+        max-width: 360px;
+        transition: all 0.3s ease;
+        animation: slideDownUpdate 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      `;
+      el.innerHTML = \`
+        <style>
+          @keyframes slideDownUpdate {
+            from { transform: translate(-50%, -100%); opacity: 0; }
+            to { transform: translate(-50%, 0); opacity: 1; }
+          }
+        </style>
+        <div style="display:flex;align-items:flex-start;gap:12px">
+          <div style="font-size:24px;background:#EAF2F8;width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center">✨</div>
+          <div style="flex:1">
+            <div style="font-weight:600;color:#1B3A5C;font-size:16px;margin-bottom:4px">发现新版本</div>
+            <div style="font-size:13px;color:#7F8C8D;line-height:1.4">点击更新体验最新功能。为确保数据万无一失，系统将在更新前帮您自动下载一份本地备份。</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:4px">
+          <button id="btn-update-cancel" style="flex:1;padding:10px;border-radius:8px;border:none;background:#F0F3F4;color:#34495E;font-size:14px;font-weight:500;cursor:pointer">稍后更新</button>
+          <button id="btn-update-confirm" style="flex:2;padding:10px;border-radius:8px;border:none;background:#2980B9;color:#fff;font-size:14px;font-weight:600;cursor:pointer">一键备份并更新</button>
+        </div>
+      \`;
+      document.body.appendChild(el);
+
+      document.getElementById('btn-update-cancel').onclick = () => {
+        el.style.transform = 'translate(-50%, -100%)';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+      };
+
+      document.getElementById('btn-update-confirm').onclick = async () => {
+        const btn = document.getElementById('btn-update-confirm');
+        const cancelBtn = document.getElementById('btn-update-cancel');
+        btn.textContent = '🔄 备份中...';
+        btn.style.opacity = '0.8';
+        btn.style.pointerEvents = 'none';
+        cancelBtn.style.pointerEvents = 'none';
+
+        try {
+          // 调用已有的备份逻辑
+          await exportToJSON();
+          
+          btn.textContent = '🚀 正在重启...';
+          // 稍微延迟让下载弹窗触发后再通知 SW
+          setTimeout(() => {
+            worker.postMessage({ type: 'SKIP_WAITING' });
+          }, 1500);
+        } catch (err) {
+          console.error('备份失败', err);
+          alert('数据备份失败！为保证数据安全，已取消强制更新。您可以手动前往“设置”页面进行备份。');
+          el.remove();
+        }
+      };
     }
   </script>
 </body>
