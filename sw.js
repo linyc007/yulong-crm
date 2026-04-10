@@ -3,7 +3,7 @@
  * 离线缓存策略
  */
 
-const CACHE_NAME = 'yulong-crm-v1';
+const CACHE_NAME = 'yulong-crm-v2';
 
 const PRECACHE_URLS = [
   './',
@@ -20,6 +20,8 @@ const PRECACHE_URLS = [
   './js/pages/logistics.js',
   './js/pages/followups.js',
   './js/pages/products.js',
+  './js/pages/inventory.js',
+  './js/pages/factory.js',
   './icons/icon-512.png',
   './manifest.json',
 ];

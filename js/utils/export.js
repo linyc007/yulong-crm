@@ -94,9 +94,45 @@ export async function exportToExcel() {
       '面料': p.material, '颜色': p.colors, '尺码': p.sizes,
       'MOQ(件)': p.moq, '出厂价(¥)': p.factoryPrice,
       '批发价($)': p.wholesalePrice, '零售价($)': p.retailPrice,
-      '生产周期(天)': p.productionDays, '适合市场': p.targetMarket, '备注': p.notes,
+      '生产周期(天)': p.productionDays, '适合市场': p.targetMarket,
+      '当前库存': p.stockQty || 0, '预警线': p.stockAlert || 0,
+      '关联工厂': p.factoryName || '', '备注': p.notes,
     })));
     XLSX.utils.book_append_sheet(wb, ws, '产品款号');
+  }
+
+  // 🏬 库存流水表
+  if (data.inventory?.length) {
+    const ws = XLSX.utils.json_to_sheet(data.inventory.map(r => ({
+      '单据号': r.code, '类型': r.type, '产品款号': r.productCode,
+      '产品名称': r.productName, '数量': r.quantity, '原因': r.reason,
+      '关联订单': r.orderCode || '', '日期': r.date,
+      '仓库': r.warehouse, '操作人': r.operator, '备注': r.notes,
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, '库存流水');
+  }
+
+  // 🏭 工厂档案表
+  if (data.factories?.length) {
+    const ws = XLSX.utils.json_to_sheet(data.factories.map(f => ({
+      '编号': f.code, '工厂名称': f.name, '联系人': f.contact,
+      '电话/微信': f.phone, '地址': f.address, '主营品类': f.specialty,
+      '评级': f.rating, '结算方式': f.paymentTerms, '备注': f.notes,
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, '工厂档案');
+  }
+
+  // 🏭 生产工单表
+  if (data.productionOrders?.length) {
+    const ws = XLSX.utils.json_to_sheet(data.productionOrders.map(po => ({
+      '工单号': po.code, '工厂': po.factoryName, '关联订单': po.orderCode || '',
+      '产品款号': po.productCode || '', '产品名称': po.productName || '',
+      '数量(件)': po.quantity, '单价(¥)': po.unitCost, '总费用(¥)': po.totalCost,
+      '下单日期': po.orderDate, '要求交货日': po.requiredDate,
+      '实际交货日': po.actualDeliveryDate || '', '状态': po.status,
+      '质量备注': po.qualityNotes || '', '备注': po.notes,
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, '生产工单');
   }
 
   // 下载
