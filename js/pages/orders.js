@@ -7,6 +7,7 @@ import {
   COUNTRY_FLAGS, createOptions, formatCurrency, formatDate, statusBadge, matchesSearch,
   showToast, showConfirm, debounce, today
 } from '../utils/helpers.js';
+import { exportSharePackage } from '../utils/export.js';
 
 let allOrders = [];
 let allCustomers = [];
@@ -308,10 +309,11 @@ function openOrderDetailModal(orderId) {
         </div>
         ${order.notes ? `<div class="detail-section"><div class="detail-section-title">备注</div><p style="font-size:13px">${order.notes}</p></div>` : ''}
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
         <button class="btn btn-danger btn-sm" id="modal-delete">删除</button>
-        <button class="btn btn-secondary" id="modal-close2">关闭</button>
-        <button class="btn btn-primary" id="modal-edit">编辑</button>
+        <button class="btn btn-secondary" id="modal-close2" style="flex:1">关闭</button>
+        <button class="btn btn-primary" id="modal-edit" style="flex:1">编辑</button>
+        <button class="btn btn-accent" id="modal-share" style="width:100%;margin-top:4px"><span style="margin-right:4px">📤</span>发送分享包给客户/合伙人</button>
       </div>
     </div>
   `;
@@ -322,6 +324,21 @@ function openOrderDetailModal(orderId) {
   overlay.querySelector('#modal-close2').addEventListener('click', close);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   overlay.querySelector('#modal-edit').addEventListener('click', () => { close(); openOrderModal(order); });
+  overlay.querySelector('#modal-share').addEventListener('click', async () => {
+    const btn = overlay.querySelector('#modal-share');
+    btn.innerHTML = '打包中...';
+    btn.style.opacity = '0.7';
+    try {
+      await exportSharePackage(order.id);
+      showToast('分享包已生成');
+    } catch (e) {
+      showToast('打包失败', 'error');
+      console.error(e);
+    } finally {
+      btn.innerHTML = '<span style="margin-right:4px">📤</span>发送分享包给客户/合伙人';
+      btn.style.opacity = '1';
+    }
+  });
   overlay.querySelector('#modal-delete').addEventListener('click', async () => {
     const ok = await showConfirm(`确定删除订单 "${order.code}" 吗？`);
     if (ok) {

@@ -12,7 +12,7 @@ import { renderFollowups } from './pages/followups.js';
 import { renderProducts } from './pages/products.js';
 import { renderInventory } from './pages/inventory.js';
 import { renderFactory } from './pages/factory.js';
-import { exportToExcel, exportToJSON, importFromJSON } from './utils/export.js';
+import { exportToExcel, exportToJSON, importFromJSON, importSharePackage } from './utils/export.js';
 import { showToast, showConfirm } from './utils/helpers.js';
 
 // 路由配置
@@ -260,6 +260,13 @@ function openMoreMenu() {
               <div class="data-item-subtitle">从备份文件恢复</div>
             </div>
           </li>
+          <li class="data-item" id="btn-import-share">
+            <div class="data-item-avatar avatar-purple">🤝</div>
+            <div class="data-item-info">
+              <div class="data-item-title">导入合作分享包</div>
+              <div class="data-item-subtitle">合并订单或物流进度 (.ylcrm)</div>
+            </div>
+          </li>
         </ul>
       </div>
     </div>
@@ -301,6 +308,17 @@ function openMoreMenu() {
       } else {
         showToast('导入失败，请检查文件格式', 'error');
       }
+    }
+  });
+
+  overlay.querySelector('#btn-import-share')?.addEventListener('click', async () => {
+    const updatedCount = await importSharePackage();
+    close();
+    if (updatedCount > 0) {
+      showToast(`成功导入/合并 ${updatedCount} 条记录！`);
+      // 重新加载当前页面以显示新数据
+      const currentRoute = window.location.hash.slice(2) || 'dashboard';
+      navigateTo(currentRoute);
     }
   });
 }
