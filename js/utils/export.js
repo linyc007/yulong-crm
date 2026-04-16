@@ -2,7 +2,7 @@
  * Excel 导出功能
  * 使用 SheetJS (xlsx) 库
  */
-import { exportAllData } from '../db.js';
+import { exportAllData, initDB, STORES, addRecord, updateRecord, getRecord, getByIndex } from '../db.js';
 
 /**
  * 导出所有数据为 Excel
@@ -94,9 +94,45 @@ export async function exportToExcel() {
       '面料': p.material, '颜色': p.colors, '尺码': p.sizes,
       'MOQ(件)': p.moq, '出厂价(¥)': p.factoryPrice,
       '批发价($)': p.wholesalePrice, '零售价($)': p.retailPrice,
-      '生产周期(天)': p.productionDays, '适合市场': p.targetMarket, '备注': p.notes,
+      '生产周期(天)': p.productionDays, '适合市场': p.targetMarket,
+      '当前库存': p.stockQty || 0, '预警线': p.stockAlert || 0,
+      '关联工厂': p.factoryName || '', '备注': p.notes,
     })));
     XLSX.utils.book_append_sheet(wb, ws, '产品款号');
+  }
+
+  // 🏬 库存流水表
+  if (data.inventory?.length) {
+    const ws = XLSX.utils.json_to_sheet(data.inventory.map(r => ({
+      '单据号': r.code, '类型': r.type, '产品款号': r.productCode,
+      '产品名称': r.productName, '数量': r.quantity, '原因': r.reason,
+      '关联订单': r.orderCode || '', '日期': r.date,
+      '仓库': r.warehouse, '操作人': r.operator, '备注': r.notes,
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, '库存流水');
+  }
+
+  // 🏭 工厂档案表
+  if (data.factories?.length) {
+    const ws = XLSX.utils.json_to_sheet(data.factories.map(f => ({
+      '编号': f.code, '工厂名称': f.name, '联系人': f.contact,
+      '电话/微信': f.phone, '地址': f.address, '主营品类': f.specialty,
+      '评级': f.rating, '结算方式': f.paymentTerms, '备注': f.notes,
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, '工厂档案');
+  }
+
+  // 🏭 生产工单表
+  if (data.productionOrders?.length) {
+    const ws = XLSX.utils.json_to_sheet(data.productionOrders.map(po => ({
+      '工单号': po.code, '工厂': po.factoryName, '关联订单': po.orderCode || '',
+      '产品款号': po.productCode || '', '产品名称': po.productName || '',
+      '数量(件)': po.quantity, '单价(¥)': po.unitCost, '总费用(¥)': po.totalCost,
+      '下单日期': po.orderDate, '要求交货日': po.requiredDate,
+      '实际交货日': po.actualDeliveryDate || '', '状态': po.status,
+      '质量备注': po.qualityNotes || '', '备注': po.notes,
+    })));
+    XLSX.utils.book_append_sheet(wb, ws, '生产工单');
   }
 
   // 下载
@@ -139,6 +175,170 @@ export async function importFromJSON() {
       } catch (err) {
         console.error('Import error:', err);
         resolve(false);
+      }
+    };
+    input.click();
+  });
+}
+
+/**
+ * 提取单笔订单及其关联数据，生成分享包 JSON
+ */
+export async function exportSharePackage(orderId) {
+  const order = await getRecord(STORES.orders, orderId);
+  if (!order) throw new Error('未找到订单数据');
+
+  const customer = await getRecord(STORES.customers, order.customerId);
+  // 为依赖记录附加上 unique code 以备导入时映射
+  if (customer) order._customerCode = customer.code;
+
+  const payments = await getByIndex(STORES.payments, 'orderId', orderId);
+  const logistics = await getByIndex(STORES.logistics, 'orderId', orderId);
+  const productionOrders = await getByIndex(STORES.productionOrders, 'orderId', orderId);
+  // 对于生产工单，还要附上 factoryCode
+  for (const po of productionOrders) {
+    if (po.factoryId) {
+      const f = await getRecord(STORES.factories, po.factoryId);
+      if (f) po._factoryCode = f.code;
+    }
+  }
+
+  const payload = {
+    app: 'yulong-crm',
+    type: 'share_package',
+    version: '1.0',
+    timestamp: new Date().toISOString(),
+    data: {
+      customers: customer ? [customer] : [],
+      orders: [order],
+      payments,
+      logistics,
+      productionOrders
+    }
+  };
+
+  const jsonStr = JSON.stringify(payload, null, 2);
+  const blob = new Blob([jsonStr], { type: 'application/json' });
+  const filename = `${order.code}_分享包.ylcrm`;
+
+  // 尝试使用 Web Share API (如微信、WhatsApp 原生分享)
+  if (navigator.share && navigator.canShare) {
+    const file = new File([blob], filename, { type: 'application/json' });
+    if (navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({
+          title: `订单 ${order.code} 详情与进度`,
+          text: '这是来自御龙CRM的订单包裹，请在系统内导入查看。',
+          files: [file]
+        });
+        return true;
+      } catch (e) {
+        if (e.name !== 'AbortError') console.error('Share failed', e);
+      }
+    }
+  }
+
+  // 降级为下载
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  return true;
+}
+
+/**
+ * 内部方法：按照 code 安全覆写插入
+ */
+async function upsertByCode(storeName, records, idRemapper = null) {
+  if (!records || !records.length) return Promise.resolve(0);
+  let count = 0;
+  for (const record of records) {
+    if (!record.code) continue;
+    
+    // 如果有 ID 映射逻辑，先执行映射
+    if (idRemapper) {
+      await idRemapper(record);
+    }
+    
+    const exists = await getByIndex(storeName, 'code', record.code);
+    if (exists && exists.length > 0) {
+      // 存在则更新，保留本地原本的 id 和 createdAt
+      const local = exists[0];
+      const merged = { ...record, id: local.id, createdAt: local.createdAt, updatedAt: new Date().toISOString() };
+      await updateRecord(storeName, merged);
+    } else {
+      // 不存在则新增，删掉分享过来的异地 id
+      delete record.id;
+      record.createdAt = new Date().toISOString();
+      record.updatedAt = record.createdAt;
+      await addRecord(storeName, record);
+    }
+    count++;
+  }
+  return count;
+}
+
+/**
+ * 导入合作分享包
+ */
+export async function importSharePackage() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.ylcrm';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) { resolve(0); return; }
+      try {
+        const text = await file.text();
+        const pkg = JSON.parse(text);
+        if (pkg.type !== 'share_package' || !pkg.data) {
+          alert('无效的格式！请确保导入的是 .ylcrm 订单分享包。');
+          resolve(0);
+          return;
+        }
+
+        const d = pkg.data;
+        let totalUpdated = 0;
+
+        // 1. 客户 (无前置依赖)
+        totalUpdated += await upsertByCode(STORES.customers, d.customers);
+        
+        // 2. 订单 (依赖 customer)
+        totalUpdated += await upsertByCode(STORES.orders, d.orders, async (o) => {
+          if (o._customerCode) {
+            const c = await getByIndex(STORES.customers, 'code', o._customerCode);
+            if (c.length) o.customerId = c[0].id;
+          }
+        });
+
+        // 3. 关联单据 (依赖 order)
+        const orderMapper = async (r) => {
+          if (r.orderCode || r._orderCode) {
+            const o = await getByIndex(STORES.orders, 'code', r.orderCode || r._orderCode);
+            if (o.length) r.orderId = o[0].id;
+          }
+        };
+        
+        totalUpdated += await upsertByCode(STORES.payments, d.payments, orderMapper);
+        totalUpdated += await upsertByCode(STORES.logistics, d.logistics, orderMapper);
+        
+        // 生产工单 (同时依赖 order 和 factory)
+        totalUpdated += await upsertByCode(STORES.productionOrders, d.productionOrders, async (po) => {
+          await orderMapper(po);
+          if (po._factoryCode) {
+            const f = await getByIndex(STORES.factories, 'code', po._factoryCode);
+            if (f.length) po.factoryId = f[0].id;
+          }
+        });
+
+        resolve(totalUpdated);
+      } catch (err) {
+        console.error('Import Error:', err);
+        alert('导入发生异常: ' + err.message);
+        resolve(0);
       }
     };
     input.click();

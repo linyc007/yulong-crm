@@ -50,6 +50,17 @@ export const CATEGORY_CODES = {
   '长袍': 'R', '其他': 'X'
 };
 
+// === 🏬 库存管理常量 ===
+export const INVENTORY_TYPES = ['入库', '出库'];
+export const INVENTORY_REASONS = ['工厂到货', '订单出货', '退货入库', '盘点调整', '样品借出', '损耗报废'];
+export const WAREHOUSES = ['档口', '主仓', '临时仓'];
+
+// === 🏭 工厂管理常量 ===
+export const FACTORY_RATINGS = ['⭐ 优秀', '🔵 良好', '🟡 一般', '🔴 较差'];
+export const FACTORY_PAYMENT_TERMS = ['现结', '月结30天', '月结60天', '货到付款', '预付50%'];
+export const FACTORY_SPECIALTIES = ['蕾丝', '印花', '针织', '梭织', '面料', '刺绣', '综合'];
+export const PRODUCTION_STATUSES = ['待排产', '生产中', '质检中', '已交货', '已取消'];
+
 /**
  * 格式化日期
  */
@@ -81,9 +92,9 @@ export function formatCNY(amount) {
  * 获取状态颜色类名
  */
 export function getStatusClass(status) {
-  const greenStatuses = ['活跃', '已付清', '已到账', 'A-优质', '已完结', '已清关', '已完成', '已提货', '已签收'];
-  const yellowStatuses = ['潜在', '部分付款', '处理中', 'B-良好', 'C-一般', '生产中', '待确认', '报关中', '清关中', '🟡 重要'];
-  const redStatuses = ['流失', '黑名单', '未付', '异常', 'D-谨慎', 'F-黑名单', '已取消', '🔴 紧急'];
+  const greenStatuses = ['活跃', '已付清', '已到账', 'A-优质', '已完结', '已清关', '已完成', '已提货', '已签收', '已交货', '⭐ 优秀', '入库', '充足'];
+  const yellowStatuses = ['潜在', '部分付款', '处理中', 'B-良好', 'C-一般', '生产中', '待确认', '报关中', '清关中', '🟡 重要', '待排产', '质检中', '🟡 一般', '🔵 良好', '低库存'];
+  const redStatuses = ['流失', '黑名单', '未付', '异常', 'D-谨慎', 'F-黑名单', '已取消', '🔴 紧急', '🔴 较差', '缺货', '出库'];
   const blueStatuses = ['运输中', '已出货', '待出货', '待收款', '已装柜'];
 
   if (greenStatuses.includes(status)) return 'status-green';

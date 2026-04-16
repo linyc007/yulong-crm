@@ -10,6 +10,14 @@ import {
 
 let searchQuery = '';
 
+function getStockStatus(p) {
+  const qty = p.stockQty || 0;
+  const alert = p.stockAlert || 0;
+  if (qty === 0) return { text: '缺货', class: 'status-red' };
+  if (alert > 0 && qty <= alert) return { text: '低库存', class: 'status-yellow' };
+  return { text: '充足', class: 'status-green' };
+}
+
 export async function renderProducts(container) {
   const products = await getAllRecords(STORES.products);
   const filtered = products.filter(p => {
@@ -32,19 +40,24 @@ export async function renderProducts(container) {
       <div class="card">
         <div class="card-body no-padding">
           ${filtered.length === 0 ? '<div class="empty-state"><div class="empty-icon">👗</div><div class="empty-title">暂无产品</div></div>' :
-          `<ul class="data-list">${filtered.map(p => `
+          `<ul class="data-list">${filtered.map(p => {
+            const stock = getStockStatus(p);
+            return `
             <li class="data-item" data-product-id="${p.id}">
               <div class="data-item-avatar avatar-purple">👗</div>
               <div class="data-item-info">
                 <div class="data-item-title">${p.name}</div>
-                <div class="data-item-subtitle">${p.code} · ${p.category} · MOQ ${p.moq}件</div>
+                <div class="data-item-subtitle">${p.code} · ${p.category} · MOQ ${p.moq}件${p.factoryName ? ' · ' + p.factoryName : ''}</div>
               </div>
               <div class="data-item-right">
                 <div class="data-item-amount">${formatCurrency(p.wholesalePrice)}</div>
-                <div class="data-item-meta">出厂 ${formatCNY(p.factoryPrice)}</div>
+                <div style="display:flex;gap:4px;align-items:center;justify-content:flex-end;margin-top:2px">
+                  <span style="font-size:12px;color:var(--text-secondary)">库存 ${(p.stockQty || 0)}</span>
+                  <span class="badge ${stock.class}" style="font-size:10px">${stock.text}</span>
+                </div>
               </div>
             </li>
-          `).join('')}</ul>`}
+          `}).join('')}</ul>`}
         </div>
       </div>
     </div>
@@ -138,6 +151,10 @@ function openProductModal(product = null) {
           <label class="form-label">适合市场</label>
           <select class="form-select" id="form-market">${createOptions(['', ...TARGET_MARKETS], p.targetMarket)}</select>
         </div>
+        <div class="form-row">
+          <div class="form-group"><label class="form-label">库存预警线 (件)</label><input class="form-input" id="form-alert" type="number" value="${p.stockAlert || ''}" min="0" placeholder="低于此数提醒"></div>
+          <div class="form-group"><label class="form-label">关联工厂</label><input class="form-input" id="form-factory" value="${p.factoryName || ''}" placeholder="如 广州锦绣蕾丝厂"></div>
+        </div>
         <div class="form-group">
           <label class="form-label">备注</label>
           <textarea class="form-textarea" id="form-notes">${p.notes || ''}</textarea>
@@ -172,6 +189,8 @@ function openProductModal(product = null) {
       retailPrice: Number(overlay.querySelector('#form-retail').value) || 0,
       productionDays: Number(overlay.querySelector('#form-days').value) || 0,
       targetMarket: overlay.querySelector('#form-market').value,
+      stockAlert: Number(overlay.querySelector('#form-alert').value) || 0,
+      factoryName: overlay.querySelector('#form-factory').value.trim(),
       notes: overlay.querySelector('#form-notes').value.trim(),
       imageUrl: '',
     };
@@ -217,6 +236,12 @@ function openProductDetailModal(p) {
           <div class="detail-row"><span class="detail-label">批发报价</span><span class="detail-value fw-bold">${formatCurrency(p.wholesalePrice)}</span></div>
           <div class="detail-row"><span class="detail-label">参考零售价</span><span class="detail-value">${formatCurrency(p.retailPrice)}</span></div>
           <div class="detail-row"><span class="detail-label">生产周期</span><span class="detail-value">${p.productionDays || '-'} 天</span></div>
+        </div>
+        <div class="detail-section">
+          <div class="detail-section-title">库存信息</div>
+          <div class="detail-row"><span class="detail-label">当前库存</span><span class="detail-value fw-bold">${(p.stockQty || 0)} 件 ${statusBadge(getStockStatus(p).text)}</span></div>
+          <div class="detail-row"><span class="detail-label">预警线</span><span class="detail-value">${p.stockAlert || '-'} 件</span></div>
+          <div class="detail-row"><span class="detail-label">关联工厂</span><span class="detail-value">${p.factoryName || '-'}</span></div>
         </div>
         <div class="detail-section">
           <div class="detail-row"><span class="detail-label">适合市场</span><span class="detail-value">${p.targetMarket || '-'}</span></div>

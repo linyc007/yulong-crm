@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'YulongCRM';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 const STORES = {
   customers: 'customers',
@@ -13,6 +13,9 @@ const STORES = {
   logistics: 'logistics',
   followups: 'followups',
   products: 'products',
+  inventory: 'inventory',           // 🏬 出入库流水
+  factories: 'factories',           // 🏭 工厂档案
+  productionOrders: 'productionOrders', // 🏭 生产工单
   counters: 'counters',  // 用于自动编号
 };
 
@@ -80,6 +83,31 @@ export function initDB() {
         const store = db.createObjectStore(STORES.products, { keyPath: 'id', autoIncrement: true });
         store.createIndex('code', 'code', { unique: true });
         store.createIndex('category', 'category', { unique: false });
+      }
+
+      // 🏬 出入库流水表
+      if (!db.objectStoreNames.contains(STORES.inventory)) {
+        const store = db.createObjectStore(STORES.inventory, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('code', 'code', { unique: true });
+        store.createIndex('productId', 'productId', { unique: false });
+        store.createIndex('type', 'type', { unique: false });
+        store.createIndex('date', 'date', { unique: false });
+      }
+
+      // 🏭 工厂档案表
+      if (!db.objectStoreNames.contains(STORES.factories)) {
+        const store = db.createObjectStore(STORES.factories, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('code', 'code', { unique: true });
+        store.createIndex('specialty', 'specialty', { unique: false });
+      }
+
+      // 🏭 生产工单表
+      if (!db.objectStoreNames.contains(STORES.productionOrders)) {
+        const store = db.createObjectStore(STORES.productionOrders, { keyPath: 'id', autoIncrement: true });
+        store.createIndex('code', 'code', { unique: true });
+        store.createIndex('factoryId', 'factoryId', { unique: false });
+        store.createIndex('orderId', 'orderId', { unique: false });
+        store.createIndex('status', 'status', { unique: false });
       }
 
       // 计数器表（用于自动生成编号）
@@ -303,6 +331,32 @@ export async function seedSampleData() {
     await addRecord(STORES.customers, c);
   }
 
+  // --- 🏭 工厂示例数据 ---
+  const factories = [
+    {
+      code: 'FAC-001', name: '广州锦绣蕾丝厂', contact: '王厂长',
+      phone: '138-2222-3333', address: '广州市番禺区大石镇工业区',
+      specialty: '蕾丝', rating: '⭐ 优秀', paymentTerms: '月结30天',
+      notes: '合作5年，质量稳定，交期准时'
+    },
+    {
+      code: 'FAC-002', name: '佛山彩云印花厂', contact: '陈经理',
+      phone: '135-6666-7777', address: '佛山市南海区罗村镇',
+      specialty: '印花', rating: '🔵 良好', paymentTerms: '现结',
+      notes: 'Ankara风格面料专业户，花色齐全'
+    },
+    {
+      code: 'FAC-003', name: '中山华美针织厂', contact: '李老板',
+      phone: '139-8888-9999', address: '中山市沙溪镇服装城旁',
+      specialty: '针织', rating: '🔵 良好', paymentTerms: '预付50%',
+      notes: '擅长都市女装，版型好'
+    }
+  ];
+
+  for (const f of factories) {
+    await addRecord(STORES.factories, f);
+  }
+
   // 设置计数器
   const db = await initDB();
   const tx = db.transaction(STORES.counters, 'readwrite');
@@ -315,6 +369,9 @@ export async function seedSampleData() {
   counterStore.put({ name: 'payment', value: 5 });
   counterStore.put({ name: 'logistics', value: 2 });
   counterStore.put({ name: 'product', value: 5 });
+  counterStore.put({ name: 'factory', value: 3 });
+  counterStore.put({ name: 'po', value: 3 });
+  counterStore.put({ name: 'inv', value: 4 });
 
   // --- 订单示例数据 ---
   const orders = [
@@ -472,13 +529,14 @@ export async function seedSampleData() {
     await addRecord(STORES.followups, f);
   }
 
-  // --- 产品示例数据 ---
+  // --- 产品示例数据 (含库存和工厂信息) ---
   const products = [
     {
       code: 'YL-D-001', category: '连衣裙', name: '蕾丝V领连衣裙（膝下款）',
       material: '聚酯纤维+蕾丝', colors: '红/金/蓝/白/紫', sizes: 'L-4XL',
       moq: 200, factoryPrice: 65, wholesalePrice: 12, retailPrice: 25,
       productionDays: 15, imageUrl: '', targetMarket: '西非(尼日利亚等)',
+      stockQty: 580, stockAlert: 100, factoryId: 1, factoryName: '广州锦绣蕾丝厂',
       notes: '爆款，常年畅销'
     },
     {
@@ -486,6 +544,7 @@ export async function seedSampleData() {
       material: '全棉印花', colors: '多花色(12色)', sizes: 'M-XXL',
       moq: 300, factoryPrice: 45, wholesalePrice: 8, retailPrice: 18,
       productionDays: 10, imageUrl: '', targetMarket: '全部市场',
+      stockQty: 320, stockAlert: 150, factoryId: 2, factoryName: '佛山彩云印花厂',
       notes: '色号见色卡'
     },
     {
@@ -493,6 +552,7 @@ export async function seedSampleData() {
       material: '涤棉混纺', colors: '6个花色', sizes: 'M-XXL',
       moq: 150, factoryPrice: 85, wholesalePrice: 15, retailPrice: 30,
       productionDays: 15, imageUrl: '', targetMarket: '中非(刚果等)',
+      stockQty: 45, stockAlert: 50, factoryId: 2, factoryName: '佛山彩云印花厂',
       notes: '新款推荐'
     },
     {
@@ -500,6 +560,7 @@ export async function seedSampleData() {
       material: '100%聚酯', colors: '金/银/白/红/蓝/绿/紫', sizes: 'N/A',
       moq: 100, factoryPrice: 120, wholesalePrice: 22, retailPrice: 45,
       productionDays: 7, imageUrl: '', targetMarket: '西非(尼日利亚等)',
+      stockQty: 0, stockAlert: 30, factoryId: 1, factoryName: '广州锦绣蕾丝厂',
       notes: 'Aso Ebi热门'
     },
     {
@@ -507,6 +568,7 @@ export async function seedSampleData() {
       material: '雪纺', colors: '黑/白/驼色/藏蓝', sizes: '均码',
       moq: 200, factoryPrice: 75, wholesalePrice: 14, retailPrice: 28,
       productionDays: 12, imageUrl: '', targetMarket: '东非(埃塞/坦桑)',
+      stockQty: 180, stockAlert: 80, factoryId: 3, factoryName: '中山华美针织厂',
       notes: '斋月旺季款'
     }
   ];
@@ -515,7 +577,75 @@ export async function seedSampleData() {
     await addRecord(STORES.products, prod);
   }
 
-  console.log('✅ 示例数据已填充完成');
+  // --- 🏭 生产工单示例数据 ---
+  const productionOrders = [
+    {
+      code: 'PO-2026-001', factoryId: 1, factoryName: '广州锦绣蕾丝厂',
+      orderId: 1, orderCode: 'ORD-2026-001',
+      productId: 1, productCode: 'YL-D-001', productName: '蕾丝V领连衣裙（膝下款）',
+      quantity: 1200, unitCost: 65, totalCost: 78000,
+      orderDate: '2026-03-17', requiredDate: '2026-04-10', actualDeliveryDate: '',
+      status: '生产中', qualityNotes: '', notes: '5个花色各240件'
+    },
+    {
+      code: 'PO-2026-002', factoryId: 2, factoryName: '佛山彩云印花厂',
+      orderId: 1, orderCode: 'ORD-2026-001',
+      productId: 2, productCode: 'YL-D-002', productName: 'Ankara印花A字裙',
+      quantity: 1200, unitCost: 45, totalCost: 54000,
+      orderDate: '2026-03-17', requiredDate: '2026-04-12', actualDeliveryDate: '',
+      status: '生产中', qualityNotes: '', notes: '3款Ankara花色'
+    },
+    {
+      code: 'PO-2026-003', factoryId: 3, factoryName: '中山华美针织厂',
+      orderId: 2, orderCode: 'ORD-2026-002',
+      productId: 0, productCode: '', productName: '都市女装6款',
+      quantity: 1800, unitCost: 78, totalCost: 140400,
+      orderDate: '2026-03-30', requiredDate: '2026-04-08', actualDeliveryDate: '',
+      status: '质检中', qualityNotes: '第一批800件已验收合格', notes: '周五前全部交货'
+    }
+  ];
+
+  for (const po of productionOrders) {
+    await addRecord(STORES.productionOrders, po);
+  }
+
+  // --- 🏬 库存流水示例数据 ---
+  const inventoryRecords = [
+    {
+      code: 'INV-2026-001', type: '入库', productId: 1, productCode: 'YL-D-001',
+      productName: '蕾丝V领连衣裙（膝下款）', quantity: 600,
+      reason: '工厂到货', orderId: 0, orderCode: '', productionOrderId: 0,
+      date: '2026-03-01', warehouse: '主仓', operator: '林经理',
+      notes: '上批生产到货'
+    },
+    {
+      code: 'INV-2026-002', type: '出库', productId: 1, productCode: 'YL-D-001',
+      productName: '蕾丝V领连衣裙（膝下款）', quantity: 20,
+      reason: '样品借出', orderId: 0, orderCode: '', productionOrderId: 0,
+      date: '2026-03-10', warehouse: '档口', operator: '林经理',
+      notes: '寄样给Afolabi'
+    },
+    {
+      code: 'INV-2026-003', type: '入库', productId: 2, productCode: 'YL-D-002',
+      productName: 'Ankara印花A字裙', quantity: 320,
+      reason: '工厂到货', orderId: 0, orderCode: '', productionOrderId: 0,
+      date: '2026-03-05', warehouse: '主仓', operator: '林经理',
+      notes: ''
+    },
+    {
+      code: 'INV-2026-004', type: '入库', productId: 5, productCode: 'YL-R-001',
+      productName: '穆斯林刺绣长袍', quantity: 200,
+      reason: '工厂到货', orderId: 0, orderCode: '', productionOrderId: 0,
+      date: '2026-03-08', warehouse: '主仓', operator: '林经理',
+      notes: '斋月备货'
+    }
+  ];
+
+  for (const inv of inventoryRecords) {
+    await addRecord(STORES.inventory, inv);
+  }
+
+  console.log('✅ 示例数据已填充完成（含工厂和库存）');
 }
 
 export { STORES };

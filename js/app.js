@@ -10,19 +10,25 @@ import { renderPayments } from './pages/payments.js';
 import { renderLogistics } from './pages/logistics.js';
 import { renderFollowups } from './pages/followups.js';
 import { renderProducts } from './pages/products.js';
-import { exportToExcel, exportToJSON, importFromJSON } from './utils/export.js';
+import { renderInventory } from './pages/inventory.js';
+import { renderFactory } from './pages/factory.js';
+import { renderAIStudio } from './pages/aistudio.js';
+import { exportToExcel, exportToJSON, importFromJSON, importSharePackage } from './utils/export.js';
 import { showToast, showConfirm } from './utils/helpers.js';
 
 // 路由配置
 const ROUTES = {
-  dashboard: { title: '业务看板', icon: '📊', render: renderDashboard, tab: true },
-  customers: { title: '客户管理', icon: '👥', render: renderCustomers, tab: true },
-  orders:    { title: '订单管理', icon: '📦', render: renderOrders, tab: true },
-  followups: { title: '跟进记录', icon: '📞', render: renderFollowups, tab: true },
-  payments:  { title: '收款记录', icon: '💰', render: renderPayments, more: true },
-  logistics: { title: '物流跟踪', icon: '🚢', render: renderLogistics, more: true },
-  products:  { title: '产品款号', icon: '👗', render: renderProducts, more: true },
-  settings:  { title: '设置', icon: '⚙️', render: renderSettings, more: true },
+  dashboard:  { title: '业务看板', icon: '📊', render: renderDashboard, tab: true },
+  customers:  { title: '客户管理', icon: '👥', render: renderCustomers, tab: true },
+  orders:     { title: '订单管理', icon: '📦', render: renderOrders, tab: true },
+  aistudio:   { title: 'AI 商拍', icon: '✨', render: renderAIStudio, more: true },
+  followups:  { title: '跟进记录', icon: '📞', render: renderFollowups, tab: true },
+  inventory:  { title: '仓库库存', icon: '🏬', render: renderInventory, more: true },
+  factory:    { title: '工厂管理', icon: '🏭', render: renderFactory, more: true },
+  payments:   { title: '收款记录', icon: '💰', render: renderPayments, more: true },
+  logistics:  { title: '物流跟踪', icon: '🚢', render: renderLogistics, more: true },
+  products:   { title: '产品款号', icon: '👗', render: renderProducts, more: true },
+  settings:   { title: '设置', icon: '⚙️', render: renderSettings, more: true },
 };
 
 let currentRoute = 'dashboard';
@@ -200,7 +206,7 @@ function updateActiveNav(routeName) {
 
   // Tab bar
   document.querySelectorAll('#tab-bar .tab-item').forEach(item => {
-    const isMore = ['payments', 'logistics', 'products', 'settings'].includes(routeName);
+    const isMore = ['aistudio', 'payments', 'logistics', 'products', 'settings', 'inventory', 'factory'].includes(routeName);
     if (item.dataset.route === 'more') {
       item.classList.toggle('active', isMore);
     } else {
@@ -256,6 +262,13 @@ function openMoreMenu() {
               <div class="data-item-subtitle">从备份文件恢复</div>
             </div>
           </li>
+          <li class="data-item" id="btn-import-share">
+            <div class="data-item-avatar avatar-purple">🤝</div>
+            <div class="data-item-info">
+              <div class="data-item-title">导入合作分享包</div>
+              <div class="data-item-subtitle">合并订单或物流进度 (.ylcrm)</div>
+            </div>
+          </li>
         </ul>
       </div>
     </div>
@@ -297,6 +310,17 @@ function openMoreMenu() {
       } else {
         showToast('导入失败，请检查文件格式', 'error');
       }
+    }
+  });
+
+  overlay.querySelector('#btn-import-share')?.addEventListener('click', async () => {
+    const updatedCount = await importSharePackage();
+    close();
+    if (updatedCount > 0) {
+      showToast(`成功导入/合并 ${updatedCount} 条记录！`);
+      // 重新加载当前页面以显示新数据
+      const currentRoute = window.location.hash.slice(2) || 'dashboard';
+      navigateTo(currentRoute);
     }
   });
 }

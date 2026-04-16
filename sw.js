@@ -3,7 +3,7 @@
  * 离线缓存策略
  */
 
-const CACHE_NAME = 'yulong-crm-v1';
+const CACHE_NAME = 'yulong-crm-v2';
 
 const PRECACHE_URLS = [
   './',
@@ -20,6 +20,8 @@ const PRECACHE_URLS = [
   './js/pages/logistics.js',
   './js/pages/followups.js',
   './js/pages/products.js',
+  './js/pages/inventory.js',
+  './js/pages/factory.js',
   './icons/icon-512.png',
   './manifest.json',
 ];
@@ -29,8 +31,14 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
   );
+});
+
+// 手动接管更新控制
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // 激活 — 清理旧缓存

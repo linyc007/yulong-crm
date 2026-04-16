@@ -5,17 +5,26 @@ import { getAllRecords, STORES } from '../db.js';
 import { formatCurrency, isOverdue, isThisWeek, statusBadge, COUNTRY_FLAGS } from '../utils/helpers.js';
 
 export async function renderDashboard(container) {
-  const [customers, orders, payments, logistics, followups] = await Promise.all([
+  const [customers, orders, payments, logistics, followups, products, productionOrders] = await Promise.all([
     getAllRecords(STORES.customers),
     getAllRecords(STORES.orders),
     getAllRecords(STORES.payments),
     getAllRecords(STORES.logistics),
     getAllRecords(STORES.followups),
+    getAllRecords(STORES.products),
+    getAllRecords(STORES.productionOrders),
   ]);
 
   const activeCustomers = customers.filter(c => c.status === '活跃').length;
   const activeOrders = orders.filter(o => !['已完结', '已取消'].includes(o.status)).length;
   const inTransit = logistics.filter(l => ['运输中', '已到港'].includes(l.logisticsStatus)).length;
+
+  // 库存预警
+  const lowStockProducts = products.filter(p => (p.stockAlert || 0) > 0 && (p.stockQty || 0) <= (p.stockAlert || 0));
+  const totalStock = products.reduce((s, p) => s + (p.stockQty || 0), 0);
+  // 生产中工单
+  const activePOs = productionOrders.filter(p => ['生产中', '质检中', '待排产'].includes(p.status));
+  const overduePOs = activePOs.filter(p => isOverdue(p.requiredDate));
 
   // 计算应收款
   const receivable = orders
@@ -66,6 +75,25 @@ export async function renderDashboard(container) {
         </div>
       </div>
 
+      <!-- 供应链 KPI -->
+      <div class="kpi-grid animate-in" style="margin-top:12px;grid-template-columns:1fr 1fr 1fr">
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-label">库存总量</div>
+          <div class="kpi-value">${totalStock.toLocaleString()}<span class="kpi-unit">件</span></div>
+          <div class="kpi-icon">📦</div>
+        </div>
+        <div class="kpi-card ${lowStockProducts.length > 0 ? 'kpi-red' : 'kpi-green'}">
+          <div class="kpi-label">低库存预警</div>
+          <div class="kpi-value">${lowStockProducts.length}<span class="kpi-unit">款</span></div>
+          <div class="kpi-icon">${lowStockProducts.length > 0 ? '⚠️' : '✅'}</div>
+        </div>
+        <div class="kpi-card ${overduePOs.length > 0 ? 'kpi-red' : 'kpi-gold'}">
+          <div class="kpi-label">生产中工单</div>
+          <div class="kpi-value">${activePOs.length}<span class="kpi-unit">单</span></div>
+          <div class="kpi-icon">${overduePOs.length > 0 ? '⚠️' : '🏭'}</div>
+        </div>
+      </div>
+
       <div class="grid-2">
         <!-- 紧急待办 -->
         <div class="card animate-in">
@@ -74,7 +102,7 @@ export async function renderDashboard(container) {
             ${overdueFollowups.length > 0 ? `<span class="badge status-red">${overdueFollowups.length}项逾期</span>` : '<span class="badge status-green">暂无</span>'}
           </div>
           <div class="card-body no-padding">
-            ${renderTodoList(orders, followups)}
+            ${renderTodoList(orders, followups, lowStockProducts, overduePOs)}
           </div>
         </div>
 
@@ -112,7 +140,7 @@ export async function renderDashboard(container) {
   `;
 }
 
-function renderTodoList(orders, followups) {
+function renderTodoList(orders, followups, lowStockProducts = [], overduePOs = []) {
   const todos = [];
 
   // 未付清的尾款
@@ -124,6 +152,24 @@ function renderTodoList(orders, followups) {
         meta: o.code,
       });
     });
+
+  // 逾期生产工单
+  overduePOs.forEach(po => {
+    todos.push({
+      urgency: '🔴',
+      text: `工厂逾期: ${po.factoryName} - ${po.productName || ''}`,
+      meta: `${po.code} · 交期 ${po.requiredDate}`,
+    });
+  });
+
+  // 低库存预警
+  lowStockProducts.forEach(p => {
+    todos.push({
+      urgency: (p.stockQty || 0) === 0 ? '🔴' : '🟡',
+      text: `${(p.stockQty || 0) === 0 ? '缺货' : '低库存'}: ${p.name}`,
+      meta: `库存 ${p.stockQty || 0}件 / 预警线 ${p.stockAlert}件`,
+    });
+  });
 
   // 逾期跟进
   followups.filter(f => isOverdue(f.nextFollowDate))
