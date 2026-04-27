@@ -15,7 +15,7 @@ import { renderFactory } from './pages/factory.js';
 import { renderAIStudio } from './pages/aistudio.js';
 import { exportToExcel, exportToJSON, importFromJSON, importSharePackage } from './utils/export.js';
 import { showToast, showConfirm } from './utils/helpers.js';
-import { checkSession, login, logout } from './auth.js';
+import { checkSession, login, register, logout } from './auth.js';
 
 // 路由配置
 const ROUTES = {
@@ -446,6 +446,7 @@ async function startApp() {
   const emailInput = document.getElementById('login-email');
   const passwordInput = document.getElementById('login-password');
   const loginBtn = document.getElementById('login-btn');
+  const registerBtn = document.getElementById('register-btn');
   const errorMsg = document.getElementById('login-error');
 
   // 检查是否已登录
@@ -470,6 +471,7 @@ async function startApp() {
       try {
         loginBtn.textContent = '登录中...';
         loginBtn.disabled = true;
+        registerBtn.disabled = true;
         errorMsg.textContent = '';
         
         await login(email, password);
@@ -480,6 +482,37 @@ async function startApp() {
       } catch (err) {
         errorMsg.textContent = err.message || '登录失败，请检查账号密码';
         loginBtn.textContent = '登录';
+        loginBtn.disabled = false;
+        registerBtn.disabled = false;
+      }
+    });
+
+    registerBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        errorMsg.textContent = '请输入邮箱和密码';
+        return;
+      }
+      
+      try {
+        registerBtn.textContent = '注册中...';
+        registerBtn.disabled = true;
+        loginBtn.disabled = true;
+        errorMsg.textContent = '';
+        
+        await register(email, password);
+        
+        errorMsg.style.color = '#2ECC71';
+        errorMsg.textContent = '注册成功！请直接点击登录。';
+        registerBtn.textContent = '注册';
+        registerBtn.disabled = false;
+        loginBtn.disabled = false;
+      } catch (err) {
+        errorMsg.style.color = '#E74C3C';
+        errorMsg.textContent = err.message || '注册失败';
+        registerBtn.textContent = '注册';
+        registerBtn.disabled = false;
         loginBtn.disabled = false;
       }
     });
