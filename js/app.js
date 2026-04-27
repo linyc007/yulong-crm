@@ -15,6 +15,7 @@ import { renderFactory } from './pages/factory.js';
 import { renderAIStudio } from './pages/aistudio.js';
 import { exportToExcel, exportToJSON, importFromJSON, importSharePackage } from './utils/export.js';
 import { showToast, showConfirm } from './utils/helpers.js';
+import { checkSession, login, logout } from './auth.js';
 
 // 路由配置
 const ROUTES = {
@@ -76,6 +77,10 @@ function buildLayout() {
           <span class="nav-icon">⚙️</span>
           <span>设置</span>
         </button>
+        <button class="nav-item" id="sidebar-logout-btn" style="color:#E74C3C;margin-top:auto;">
+          <span class="nav-icon">🚪</span>
+          <span>退出登录</span>
+        </button>
       </nav>
       <div class="sidebar-footer">
         御龙服装城 · v1.0
@@ -125,9 +130,23 @@ function buildLayout() {
   `;
 
   // Sidebar navigation events
-  document.getElementById('sidebar-nav').addEventListener('click', (e) => {
+  document.getElementById('sidebar-nav').addEventListener('click', async (e) => {
     const item = e.target.closest('.nav-item');
     if (!item) return;
+
+    if (item.id === 'sidebar-logout-btn') {
+      const ok = await showConfirm('确定要退出登录吗？');
+      if (ok) {
+        try {
+          await logout();
+          window.location.reload();
+        } catch (e) {
+          showToast('退出登录失败: ' + e.message, 'error');
+        }
+      }
+      return;
+    }
+
     const route = item.dataset.route;
     navigateTo(route);
     closeSidebar();
@@ -269,6 +288,13 @@ function openMoreMenu() {
               <div class="data-item-subtitle">合并订单或物流进度 (.ylcrm)</div>
             </div>
           </li>
+          <li class="data-item" id="btn-logout" style="color:#E74C3C;">
+            <div class="data-item-avatar avatar-red">🚪</div>
+            <div class="data-item-info">
+              <div class="data-item-title">退出登录</div>
+              <div class="data-item-subtitle">注销当前 Supabase 账号</div>
+            </div>
+          </li>
         </ul>
       </div>
     </div>
@@ -321,6 +347,18 @@ function openMoreMenu() {
       // 重新加载当前页面以显示新数据
       const currentRoute = window.location.hash.slice(2) || 'dashboard';
       navigateTo(currentRoute);
+    }
+  });
+
+  overlay.querySelector('#btn-logout')?.addEventListener('click', async () => {
+    const ok = await showConfirm('确定要退出登录吗？');
+    if (ok) {
+      try {
+        await logout();
+        window.location.reload();
+      } catch (e) {
+        showToast('退出登录失败: ' + e.message, 'error');
+      }
     }
   });
 }
@@ -402,5 +440,51 @@ function closeSidebar() {
   document.getElementById('sidebar-backdrop').classList.remove('active');
 }
 
+// 身份验证与启动控制
+async function startApp() {
+  const overlay = document.getElementById('login-overlay');
+  const emailInput = document.getElementById('login-email');
+  const passwordInput = document.getElementById('login-password');
+  const loginBtn = document.getElementById('login-btn');
+  const errorMsg = document.getElementById('login-error');
+
+  // 检查是否已登录
+  const session = await checkSession();
+  
+  if (session) {
+    // 已登录，直接初始化
+    overlay.style.display = 'none';
+    initApp();
+  } else {
+    // 未登录，显示登录界面
+    overlay.style.display = 'flex';
+    
+    loginBtn.addEventListener('click', async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value;
+      if (!email || !password) {
+        errorMsg.textContent = '请输入邮箱和密码';
+        return;
+      }
+      
+      try {
+        loginBtn.textContent = '登录中...';
+        loginBtn.disabled = true;
+        errorMsg.textContent = '';
+        
+        await login(email, password);
+        
+        // 登录成功
+        overlay.style.display = 'none';
+        initApp();
+      } catch (err) {
+        errorMsg.textContent = err.message || '登录失败，请检查账号密码';
+        loginBtn.textContent = '登录';
+        loginBtn.disabled = false;
+      }
+    });
+  }
+}
+
 // 启动应用
-document.addEventListener('DOMContentLoaded', initApp);
+document.addEventListener('DOMContentLoaded', startApp);
