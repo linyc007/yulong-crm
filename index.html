@@ -26,8 +26,36 @@
   <!-- Preload hint -->
   <link rel="modulepreload" href="js/app.js">
   <link rel="modulepreload" href="js/db.js">
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+  <!-- Login Overlay -->
+  <div id="login-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#0F2640,#1B3A5C);z-index:10000;align-items:center;justify-content:center;">
+    <div style="background:#fff;padding:32px;border-radius:16px;width:90%;max-width:400px;box-shadow:0 10px 40px rgba(0,0,0,0.3);text-align:center;">
+      <img src="icons/icon-512.png" alt="Logo" style="width:64px;height:64px;border-radius:12px;margin-bottom:16px;">
+      <h2 style="margin:0 0 8px 0;color:#1B3A5C;">御龙批发CRM</h2>
+      <p style="color:#7F8C8D;margin:0 0 24px 0;font-size:14px;">请登录以继续使用</p>
+      
+      <div style="margin-bottom:16px;text-align:left;">
+        <label style="display:block;margin-bottom:8px;color:#34495E;font-size:14px;font-weight:600;">邮箱</label>
+        <input type="email" id="login-email" placeholder="输入邮箱" style="width:100%;padding:12px;border:1px solid #E0E6ED;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">
+      </div>
+      
+      <div style="margin-bottom:24px;text-align:left;">
+        <label style="display:block;margin-bottom:8px;color:#34495E;font-size:14px;font-weight:600;">密码</label>
+        <input type="password" id="login-password" placeholder="输入密码" style="width:100%;padding:12px;border:1px solid #E0E6ED;border-radius:8px;font-size:15px;box-sizing:border-box;outline:none;">
+      </div>
+      
+      <div style="display:flex;gap:12px;">
+        <button id="login-btn" style="flex:1;padding:14px;background:#2980B9;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">登录</button>
+        <button id="register-btn" style="flex:1;padding:14px;background:#fff;color:#2980B9;border:1px solid #2980B9;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">注册</button>
+      </div>
+      <div id="login-error" style="color:#E74C3C;font-size:14px;margin-top:16px;min-height:20px;"></div>
+    </div>
+  </div>
+
   <div id="app" class="app-container">
     <!-- Loading Screen -->
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;gap:16px;background:linear-gradient(135deg,#0F2640,#1B3A5C)">
