@@ -1,10 +1,8 @@
 /**
- * IndexedDB 数据层 — 御龙批发CRM
- * 管理所有业务数据的本地存储
+ * Supabase 数据层 — 御龙批发CRM
+ * 管理所有业务数据的存储
  */
-
-const DB_NAME = 'YulongCRM';
-const DB_VERSION = 2;
+import { supabase } from './auth.js';
 
 const STORES = {
   customers: 'customers',
@@ -19,132 +17,49 @@ const STORES = {
   counters: 'counters',  // 用于自动编号
 };
 
-let dbInstance = null;
-
 /**
  * 初始化数据库
  */
 export function initDB() {
-  return new Promise((resolve, reject) => {
-    if (dbInstance) {
-      resolve(dbInstance);
-      return;
-    }
+  return Promise.resolve();
+}
 
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const db = event.target.result;
-
-      // 客户表
-      if (!db.objectStoreNames.contains(STORES.customers)) {
-        const store = db.createObjectStore(STORES.customers, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('country', 'country', { unique: false });
-        store.createIndex('status', 'status', { unique: false });
-        store.createIndex('creditLevel', 'creditLevel', { unique: false });
-      }
-
-      // 订单表
-      if (!db.objectStoreNames.contains(STORES.orders)) {
-        const store = db.createObjectStore(STORES.orders, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('customerId', 'customerId', { unique: false });
-        store.createIndex('status', 'status', { unique: false });
-        store.createIndex('balanceStatus', 'balanceStatus', { unique: false });
-      }
-
-      // 收款表
-      if (!db.objectStoreNames.contains(STORES.payments)) {
-        const store = db.createObjectStore(STORES.payments, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('orderId', 'orderId', { unique: false });
-        store.createIndex('customerId', 'customerId', { unique: false });
-      }
-
-      // 物流表
-      if (!db.objectStoreNames.contains(STORES.logistics)) {
-        const store = db.createObjectStore(STORES.logistics, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('orderId', 'orderId', { unique: false });
-        store.createIndex('logisticsStatus', 'logisticsStatus', { unique: false });
-      }
-
-      // 跟进记录表
-      if (!db.objectStoreNames.contains(STORES.followups)) {
-        const store = db.createObjectStore(STORES.followups, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('customerId', 'customerId', { unique: false });
-        store.createIndex('date', 'date', { unique: false });
-        store.createIndex('nextFollowDate', 'nextFollowDate', { unique: false });
-      }
-
-      // 产品表
-      if (!db.objectStoreNames.contains(STORES.products)) {
-        const store = db.createObjectStore(STORES.products, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('category', 'category', { unique: false });
-      }
-
-      // 🏬 出入库流水表
-      if (!db.objectStoreNames.contains(STORES.inventory)) {
-        const store = db.createObjectStore(STORES.inventory, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('productId', 'productId', { unique: false });
-        store.createIndex('type', 'type', { unique: false });
-        store.createIndex('date', 'date', { unique: false });
-      }
-
-      // 🏭 工厂档案表
-      if (!db.objectStoreNames.contains(STORES.factories)) {
-        const store = db.createObjectStore(STORES.factories, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('specialty', 'specialty', { unique: false });
-      }
-
-      // 🏭 生产工单表
-      if (!db.objectStoreNames.contains(STORES.productionOrders)) {
-        const store = db.createObjectStore(STORES.productionOrders, { keyPath: 'id', autoIncrement: true });
-        store.createIndex('code', 'code', { unique: true });
-        store.createIndex('factoryId', 'factoryId', { unique: false });
-        store.createIndex('orderId', 'orderId', { unique: false });
-        store.createIndex('status', 'status', { unique: false });
-      }
-
-      // 计数器表（用于自动生成编号）
-      if (!db.objectStoreNames.contains(STORES.counters)) {
-        db.createObjectStore(STORES.counters, { keyPath: 'name' });
-      }
-    };
-
-    request.onsuccess = (event) => {
-      dbInstance = event.target.result;
-      resolve(dbInstance);
-    };
-
-    request.onerror = (event) => {
-      reject(event.target.error);
-    };
-  });
+/**
+ * 辅助函数：将 Supabase 的行数据展平
+ */
+function mapRecord(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    ...(row.data || {}),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }
 
 /**
  * 获取下一个自增编号
  */
 export async function getNextCounter(counterName) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORES.counters, 'readwrite');
-    const store = tx.objectStore(STORES.counters);
-    const getReq = store.get(counterName);
+  const { data: rows, error } = await supabase
+    .from(STORES.counters)
+    .select('*')
+    .eq('data->>name', counterName)
+    .limit(1);
 
-    getReq.onsuccess = () => {
-      const counter = getReq.result || { name: counterName, value: 0 };
-      counter.value += 1;
-      store.put(counter);
-      resolve(counter.value);
-    };
-    getReq.onerror = () => reject(getReq.error);
-  });
+  if (error) throw new Error(error.message);
+
+  if (rows && rows.length > 0) {
+    const row = rows[0];
+    const counter = mapRecord(row);
+    counter.value = (counter.value || 0) + 1;
+    await updateRecord(STORES.counters, counter);
+    return counter.value;
+  } else {
+    const newValue = 1;
+    await addRecord(STORES.counters, { name: counterName, value: newValue });
+    return newValue;
+  }
 }
 
 /**
@@ -152,103 +67,99 @@ export async function getNextCounter(counterName) {
  */
 
 // 新增
-export async function addRecord(storeName, data) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    data.createdAt = new Date().toISOString();
-    data.updatedAt = new Date().toISOString();
-    const request = store.add(data);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+export async function addRecord(storeName, recordData) {
+  const { id, ...rest } = recordData;
+  const { data, error } = await supabase
+    .from(storeName)
+    .insert({ data: rest })
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data.id;
 }
 
 // 更新
-export async function updateRecord(storeName, data) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    data.updatedAt = new Date().toISOString();
-    const request = store.put(data);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+export async function updateRecord(storeName, recordData) {
+  const { id, ...rest } = recordData;
+  if (!id) throw new Error('Update requires an id');
+
+  const { data, error } = await supabase
+    .from(storeName)
+    .update({ data: rest })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data.id;
 }
 
 // 删除
 export async function deleteRecord(storeName, id) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  const { error } = await supabase
+    .from(storeName)
+    .delete()
+    .eq('id', id);
+
+  if (error) throw new Error(error.message);
 }
 
 // 获取单条
 export async function getRecord(storeName, id) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    const request = store.get(id);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+  const { data, error } = await supabase
+    .from(storeName)
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null; // No rows found
+    throw new Error(error.message);
+  }
+  return mapRecord(data);
 }
 
 // 获取所有
 export async function getAllRecords(storeName) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    const request = store.getAll();
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
+  const { data, error } = await supabase
+    .from(storeName)
+    .select('*');
+
+  if (error) throw new Error(error.message);
+  return (data || []).map(mapRecord);
 }
 
 // 按索引查询
 export async function getByIndex(storeName, indexName, value) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    const index = store.index(indexName);
-    const request = index.getAll(value);
-    request.onsuccess = () => resolve(request.result || []);
-    request.onerror = () => reject(request.error);
-  });
+  const { data, error } = await supabase
+    .from(storeName)
+    .select('*')
+    .eq(`data->>${indexName}`, value);
+
+  if (error) throw new Error(error.message);
+  return (data || []).map(mapRecord);
 }
 
 // 获取记录总数
 export async function getCount(storeName) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    const request = store.count();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+  const { count, error } = await supabase
+    .from(storeName)
+    .select('*', { count: 'exact', head: true });
+
+  if (error) throw new Error(error.message);
+  return count || 0;
 }
 
 // 清空一个表
 export async function clearStore(storeName) {
-  const db = await initDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(storeName, 'readwrite');
-    const store = tx.objectStore(storeName);
-    const request = store.clear();
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
+  // Supabase delete requires a filter. neq('id', -1) matches all positive ids.
+  const { error } = await supabase
+    .from(storeName)
+    .delete()
+    .neq('id', -1);
+
+  if (error) throw new Error(error.message);
 }
 
 /**
@@ -358,20 +269,17 @@ export async function seedSampleData() {
   }
 
   // 设置计数器
-  const db = await initDB();
-  const tx = db.transaction(STORES.counters, 'readwrite');
-  const counterStore = tx.objectStore(STORES.counters);
-  counterStore.put({ name: 'NG', value: 2 });
-  counterStore.put({ name: 'CD', value: 1 });
-  counterStore.put({ name: 'ET', value: 1 });
-  counterStore.put({ name: 'TZ', value: 1 });
-  counterStore.put({ name: 'order', value: 4 });
-  counterStore.put({ name: 'payment', value: 5 });
-  counterStore.put({ name: 'logistics', value: 2 });
-  counterStore.put({ name: 'product', value: 5 });
-  counterStore.put({ name: 'factory', value: 3 });
-  counterStore.put({ name: 'po', value: 3 });
-  counterStore.put({ name: 'inv', value: 4 });
+  await addRecord(STORES.counters, { name: 'NG', value: 2 });
+  await addRecord(STORES.counters, { name: 'CD', value: 1 });
+  await addRecord(STORES.counters, { name: 'ET', value: 1 });
+  await addRecord(STORES.counters, { name: 'TZ', value: 1 });
+  await addRecord(STORES.counters, { name: 'order', value: 4 });
+  await addRecord(STORES.counters, { name: 'payment', value: 5 });
+  await addRecord(STORES.counters, { name: 'logistics', value: 2 });
+  await addRecord(STORES.counters, { name: 'product', value: 5 });
+  await addRecord(STORES.counters, { name: 'factory', value: 3 });
+  await addRecord(STORES.counters, { name: 'po', value: 3 });
+  await addRecord(STORES.counters, { name: 'inv', value: 4 });
 
   // --- 订单示例数据 ---
   const orders = [
